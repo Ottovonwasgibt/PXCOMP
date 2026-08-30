@@ -23,7 +23,7 @@ Every coordinate is randomly assigned while preserving exact equal quotas. This 
 
 Each layer receives its exact quota from the currently unassigned work surface, but selection is driven by smooth deterministic random fields. The Territory control moves from fine fragments toward broad islands/territories without changing the conservation rule.
 
-### Vector Cutouts — v0.3 mixed primitives
+### Vector Cutouts — mixed primitives
 
 Vector Cutouts use hard geometry rather than seed growth. Every candidate cutout independently chooses a random complexity from `1` through **Max primitive points**:
 
@@ -35,11 +35,37 @@ Vector Cutouts use hard geometry rather than seed growth. Every candidate cutout
 
 Every candidate is intersected with the still-unassigned work surface. If it would overshoot a source's remaining quota, PXCOMP clips it with a straight directional half-plane, keeping the boundary crisp. The final source receives the remainder, guaranteeing the core invariant.
 
-PXCOMP v0.3 retains the v0.2 (`algorithm_version: 1.1`) fixed-point polygon generator so previously saved vector projects remain reproducible. Editing an allocation control upgrades that project to the current `1.2` mixed-primitive algorithm.
+PXCOMP retains the v0.2 (`algorithm_version: 1.1`) fixed-point polygon generator so previously saved vector projects remain reproducible. Editing an allocation control upgrades that project to the current `1.2` mixed-primitive algorithm.
 
 See `docs/VECTOR-TERRITORIES.md` for the algorithm definition.
 
-## Desktop features in v0.3
+## Desktop workflow in v0.4
+
+The v0.4 iteration keeps the image/allocation engine unchanged and reorganizes the interface around four direct steps:
+
+1. **Sources** — add or drag/drop photographs and RAW files, select, navigate, remove, or drag to reorder the sequential source list.
+2. **Canvas & crop** — set output dimensions, apply common aspect-ratio presets, swap orientation, drag the active image to crop, and use the mouse wheel to zoom.
+3. **Composition** — choose Pixel Random, Organic Territories, or Vector Cutouts, adjust only the controls relevant to that mode, choose a deterministic seed, and generate the composite.
+4. **Project & export** — open/save `.pxcomp` recipes and export through one compact format selector.
+
+Additional usability changes:
+
+- resizable sidebar/workspace splitter
+- drag/drop images onto the source list, canvas, or application window
+- drag source rows to reorder them
+- previous/next source navigation
+- live source-count and equal-share summary
+- crop center/reset controls
+- debounced crop redraw while dragging or zooming
+- responsive fit-to-window canvas preview
+- explicit **CROP**, **COMPOSITE**, and **UPDATE NEEDED** workspace states
+- standard project Save / Save As behavior
+- indeterminate progress/status feedback during render and export
+- keyboard shortcuts: `Ctrl+I` add images, `Ctrl+O` open, `Ctrl+S` save, `Ctrl+Return` generate, `Ctrl+R` new seed, `PgUp/PgDown` navigate sources, `Ctrl+0` reset crop, `Delete` remove source
+
+See `docs/UX-v0.4.md` for the interface refinement brief.
+
+## Desktop features
 
 - Windows desktop UI (PySide6)
 - multi-file photographic / RAW input
@@ -94,7 +120,7 @@ GitHub Actions runs the same tests and packaging process and publishes a Windows
 
 - The desktop build prioritizes correctness and a usable photographic workflow over tiled/GPU rendering. Very large canvases can consume substantial RAM during full-resolution generation/export.
 - RAW support is broad but depends on the LibRaw version bundled by `rawpy`; newly released or unusual cameras can require a newer decoder.
-- 16-bit TIFF is the high-precision master path; PSD is 8-bit layered in v0.3.
+- 16-bit TIFF is the high-precision master path; PSD is 8-bit layered in v0.4.
 - Source paths in `.pxcomp` projects currently point to the original local files rather than embedding copies.
 
 ## Development
