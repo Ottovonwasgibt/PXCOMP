@@ -23,14 +23,20 @@ Every coordinate is randomly assigned while preserving exact equal quotas. This 
 
 Each layer receives its exact quota from the currently unassigned work surface, but selection is driven by smooth deterministic random fields. The Territory control moves from fine fragments toward broad islands/territories without changing the conservation rule.
 
-## Desktop features in v0.1
+### Vector Cutouts
+
+PXCOMP v0.2 adds hard-edged vector-derived territories. Random points are connected into closed polygon shapes, clipped against the remaining unassigned work surface, and accumulated until each source reaches its exact quota. When a candidate polygon overshoots the remaining quota, it is clipped by a straight directional vector cut rather than feathered or randomly eroded.
+
+Controls include **Cutout scale** and **Vector points per cutout**. This mode is intended to produce collage / stencil / cut-paper geometry instead of radial seed-growth blobs. See `docs/VECTOR-TERRITORIES.md` for the algorithm definition.
+
+## Desktop features in v0.2
 
 - Windows desktop UI (PySide6)
 - drag/drop-style multi-file selection
 - common canvas size
 - per-photo crop, zoom and reposition
 - deterministic seed
-- Pixel Random and Organic Territories
+- Pixel Random, Organic Territories, and Vector Cutouts
 - non-destructive `.pxcomp` project recipes
 - JPEG / PNG input
 - WebP / AVIF where supported by the installed Pillow build
@@ -74,9 +80,9 @@ GitHub Actions runs the same tests and packaging process and publishes `PXCOMP-w
 
 ## Current limits
 
-- First desktop build prioritizes correctness and a usable photographic workflow over tiled/gpu rendering. Very large canvases can consume substantial RAM during full-resolution generation/export.
+- The desktop build prioritizes correctness and a usable photographic workflow over tiled/GPU rendering. Very large canvases can consume substantial RAM during full-resolution generation/export.
 - RAW support is broad but depends on the LibRaw version bundled by `rawpy`; newly released or unusual cameras can require a newer decoder.
-- 16-bit TIFF is the high-precision master path; PSD is 8-bit layered in v0.1.
+- 16-bit TIFF is the high-precision master path; PSD is 8-bit layered in v0.2.
 - Source paths in `.pxcomp` projects currently point to the original local files rather than embedding copies.
 
 ## Development
