@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import traceback
+
 import numpy as np
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -30,14 +31,20 @@ class CanvasView(QtWidgets.QLabel):
     def set_drag_enabled(self, enabled: bool) -> None:
         self._drag_enabled = enabled
         self.setCursor(
-            QtCore.Qt.CursorShape.OpenHandCursor if enabled else QtCore.Qt.CursorShape.ArrowCursor
+            QtCore.Qt.CursorShape.OpenHandCursor
+            if enabled
+            else QtCore.Qt.CursorShape.ArrowCursor
         )
 
     def set_array(self, array: np.ndarray, canvas_width: int, canvas_height: int) -> None:
         array = np.ascontiguousarray(array, dtype=np.uint8)
         height, width = array.shape[:2]
         image = QtGui.QImage(
-            array.data, width, height, int(array.strides[0]), QtGui.QImage.Format.Format_RGB888
+            array.data,
+            width,
+            height,
+            int(array.strides[0]),
+            QtGui.QImage.Format.Format_RGB888,
         ).copy()
         self.setPixmap(QtGui.QPixmap.fromImage(image))
         self._preview_width = width
@@ -93,7 +100,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         scroll = QtWidgets.QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setFixedWidth(350)
+        scroll.setFixedWidth(365)
         panel = QtWidgets.QWidget()
         form = QtWidgets.QVBoxLayout(panel)
         form.setContentsMargins(16, 16, 16, 24)
@@ -145,10 +152,15 @@ class MainWindow(QtWidgets.QMainWindow):
         zoom_row.addWidget(self.zoom_value)
         form.addLayout(zoom_row)
         self.zoom_slider.valueChanged.connect(self._zoom_changed)
+
         reset_crop = QtWidgets.QPushButton("Reset active crop")
         reset_crop.clicked.connect(self.reset_crop)
         form.addWidget(reset_crop)
-        crop_help = QtWidgets.QLabel("Drag the photograph on the large canvas to reposition it. Cropping is non-destructive.")
+
+        crop_help = QtWidgets.QLabel(
+            "Drag the photograph on the large canvas to reposition it. "
+            "Cropping is non-destructive."
+        )
         crop_help.setWordWrap(True)
         crop_help.setStyleSheet("color:#777; font-size:11px;")
         form.addWidget(crop_help)
@@ -157,8 +169,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self.mode_combo = QtWidgets.QComboBox()
         self.mode_combo.addItem("Pixel Random", "pixel")
         self.mode_combo.addItem("Organic Territories", "organic")
-        self.mode_combo.currentIndexChanged.connect(self._allocation_changed)
+        self.mode_combo.addItem("Vector Cutouts", "vector")
+        self.mode_combo.currentIndexChanged.connect(self._mode_changed)
         form.addWidget(self.mode_combo)
+
+        self.mode_help = QtWidgets.QLabel()
+        self.mode_help.setWordWrap(True)
+        self.mode_help.setStyleSheet(
+            "color:#8a8a8a; font-size:11px; padding:6px; "
+            "background:#1b1b1b; border-left:2px solid #444;"
+        )
+        form.addWidget(self.mode_help)
+
+        self.territory_label = QtWidgets.QLabel("Territory size")
+        self.territory_label.setStyleSheet("color:#aaa; font-size:11px;")
+        form.addWidget(self.territory_label)
 
         territory_row = QtWidgets.QHBoxLayout()
         self.territory_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
@@ -168,6 +193,15 @@ class MainWindow(QtWidgets.QMainWindow):
         territory_row.addWidget(self.territory_value)
         form.addLayout(territory_row)
         self.territory_slider.valueChanged.connect(self._territory_changed)
+
+        self.vector_points_label = QtWidgets.QLabel("Vector points per cutout")
+        self.vector_points_label.setStyleSheet("color:#aaa; font-size:11px;")
+        form.addWidget(self.vector_points_label)
+        self.vector_points_spin = QtWidgets.QSpinBox()
+        self.vector_points_spin.setRange(3, 32)
+        self.vector_points_spin.setSuffix(" points")
+        self.vector_points_spin.valueChanged.connect(self._vector_points_changed)
+        form.addWidget(self.vector_points_spin)
 
         seed_row = QtWidgets.QHBoxLayout()
         self.seed_spin = QtWidgets.QSpinBox()
@@ -213,7 +247,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.status = QtWidgets.QLabel("Ready.")
         self.status.setWordWrap(True)
-        self.status.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.status.setTextInteractionFlags(
+            QtCore.Qt.TextInteractionFlag.TextSelectableByMouse
+        )
         self.status.setStyleSheet("color:#999; padding-top:10px;")
         form.addWidget(self.status)
         form.addStretch(1)
@@ -223,7 +259,9 @@ class MainWindow(QtWidgets.QMainWindow):
         canvas_layout.setContentsMargins(20, 20, 20, 20)
         self.canvas = CanvasView()
         self.canvas.dragged.connect(self.drag_active_source)
-        canvas_layout.addWidget(self.canvas, 1, QtCore.Qt.AlignmentFlag.AlignCenter)
+        canvas_layout.addWidget(
+            self.canvas, 1, QtCore.Qt.AlignmentFlag.AlignCenter
+        )
         root.addWidget(canvas_container, 1)
 
     @staticmethod
@@ -238,6 +276,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.project.mode = str(self.mode_combo.currentData())
         self.project.seed = self.seed_spin.value()
         self.project.territory = self.territory_slider.value()
+        self.project.vector_points = self.vector_points_spin.value()
         self.project.validate()
 
     def _load_controls_from_project(self) -> None:
@@ -247,23 +286,57 @@ class MainWindow(QtWidgets.QMainWindow):
             QtCore.QSignalBlocker(self.mode_combo),
             QtCore.QSignalBlocker(self.seed_spin),
             QtCore.QSignalBlocker(self.territory_slider),
+            QtCore.QSignalBlocker(self.vector_points_spin),
         ]
         self.width_spin.setValue(self.project.width)
         self.height_spin.setValue(self.project.height)
         self.seed_spin.setValue(max(0, min(2147483647, self.project.seed)))
         self.territory_slider.setValue(self.project.territory)
         self.territory_value.setText(str(self.project.territory))
+        self.vector_points_spin.setValue(self.project.vector_points)
         mode_index = self.mode_combo.findData(self.project.mode)
         self.mode_combo.setCurrentIndex(max(0, mode_index))
         del blockers
+        self._refresh_mode_controls()
         self._rebuild_source_list()
+
+    def _refresh_mode_controls(self) -> None:
+        mode = str(self.mode_combo.currentData())
+        is_vector = mode == "vector"
+        is_spatial = mode in {"organic", "vector"}
+
+        self.territory_label.setVisible(is_spatial)
+        self.territory_slider.setVisible(is_spatial)
+        self.territory_value.setVisible(is_spatial)
+        self.vector_points_label.setVisible(is_vector)
+        self.vector_points_spin.setVisible(is_vector)
+
+        if mode == "pixel":
+            self.mode_help.setText(
+                "Independent random pixel ownership. Fine grain / pointillist interference."
+            )
+        elif mode == "organic":
+            self.territory_label.setText("Territory size")
+            self.mode_help.setText(
+                "Smooth random fields allocate broad islands. This is the older soft / "
+                "dust-like territory grammar."
+            )
+        else:
+            self.territory_label.setText("Cutout scale")
+            self.mode_help.setText(
+                "Random points are connected into hard vector polygons. Each polygon is "
+                "clipped against the remaining work surface; quota overshoot is cut by a "
+                "straight vector line. No radial seed growth or feathering."
+            )
 
     def _rebuild_source_list(self) -> None:
         self.source_list.clear()
         for index, source in enumerate(self.project.sources):
             self.source_list.addItem(f"{index + 1:02d}  {source.name}")
         if self.project.sources:
-            self.source_list.setCurrentRow(min(max(self.active_index, 0), len(self.project.sources) - 1))
+            self.source_list.setCurrentRow(
+                min(max(self.active_index, 0), len(self.project.sources) - 1)
+            )
         else:
             self.active_index = -1
 
@@ -273,8 +346,15 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.active_index >= 0:
             self.show_active_source()
 
+    def _mode_changed(self, *_args) -> None:
+        self._refresh_mode_controls()
+        self._allocation_changed()
+
     def _territory_changed(self, value: int) -> None:
         self.territory_value.setText(str(value))
+        self._allocation_changed()
+
+    def _vector_points_changed(self, _value: int) -> None:
         self._allocation_changed()
 
     def _zoom_changed(self, value: int) -> None:
@@ -295,7 +375,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.active_index = len(self.project.sources) - len(paths)
         self._rebuild_source_list()
         self.source_list.setCurrentRow(self.active_index)
-        self.status.setText(f"Loaded {len(self.project.sources)} source(s). Target share: {100 / len(self.project.sources):.4f}% each.")
+        self.status.setText(
+            f"Loaded {len(self.project.sources)} source(s). "
+            f"Target share: {100 / len(self.project.sources):.4f}% each."
+        )
 
     def remove_source(self) -> None:
         row = self.source_list.currentRow()
@@ -345,7 +428,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.canvas.set_drag_enabled(True)
             source = self.project.sources[self.active_index]
             self.status.setText(
-                f"Crop: {source.name}\nzoom {source.zoom:.2f}× · x {source.offset_x:.1f}px · y {source.offset_y:.1f}px"
+                f"Crop: {source.name}\nzoom {source.zoom:.2f}× · "
+                f"x {source.offset_x:.1f}px · y {source.offset_y:.1f}px"
             )
         except Exception as exc:
             self._show_error("Could not render source", exc)
@@ -354,7 +438,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._sync_project_from_controls()
         if not self.project.sources:
             raise ValueError("Add at least one source image")
-        if self.owners is None or self.owners.shape != (self.project.height, self.project.width):
+        if self.owners is None or self.owners.shape != (
+            self.project.height,
+            self.project.width,
+        ):
             self._set_busy("Generating exact ownership map…")
             self.owners = generate_ownership(
                 self.project.width,
@@ -363,6 +450,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.project.seed,
                 self.project.mode,
                 self.project.territory,
+                self.project.vector_points,
             )
             report = validate_ownership(self.owners, len(self.project.sources))
             if not report["valid"]:
@@ -376,11 +464,15 @@ class MainWindow(QtWidgets.QMainWindow):
             array = render_preview_composite(self.project, owners)
             self.canvas.set_array(array, self.project.width, self.project.height)
             self.canvas.set_drag_enabled(False)
-            counts = np.bincount(owners.reshape(-1), minlength=len(self.project.sources))
+            counts = np.bincount(
+                owners.reshape(-1), minlength=len(self.project.sources)
+            )
             shares = counts * 100.0 / owners.size
             self.status.setText(
-                f"Composite generated. {len(self.project.sources)} sources · {owners.size:,} pixels · "
-                f"shares {shares.min():.4f}%–{shares.max():.4f}% · 0 overlap · 0 holes."
+                f"Composite generated · {self.project.mode} · "
+                f"{len(self.project.sources)} sources · {owners.size:,} pixels · "
+                f"shares {shares.min():.4f}%–{shares.max():.4f}% · "
+                "0 overlap · 0 holes."
             )
         except Exception as exc:
             self._show_error("Could not generate composite", exc)
@@ -391,7 +483,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def save_project_dialog(self) -> None:
         self._sync_project_from_controls()
-        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save PXCOMP project", "project.pxcomp", "PXCOMP project (*.pxcomp)")
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Save PXCOMP project",
+            "project.pxcomp",
+            "PXCOMP project (*.pxcomp)",
+        )
         if path:
             try:
                 save_project(self.project, path)
@@ -400,7 +497,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._show_error("Could not save project", exc)
 
     def load_project_dialog(self) -> None:
-        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Open PXCOMP project", "", "PXCOMP project (*.pxcomp)")
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Open PXCOMP project", "", "PXCOMP project (*.pxcomp)"
+        )
         if not path:
             return
         try:
@@ -417,28 +516,46 @@ class MainWindow(QtWidgets.QMainWindow):
             self._show_error("Could not load project", exc)
 
     def export_png_dialog(self) -> None:
-        self._export_dialog("PNG image (*.png)", "composite.png", lambda p, o: export_png(self.project, o, p))
+        self._export_dialog(
+            "PNG image (*.png)",
+            "composite.png",
+            lambda p, o: export_png(self.project, o, p),
+        )
 
     def export_jpeg_dialog(self) -> None:
-        self._export_dialog("JPEG image (*.jpg *.jpeg)", "composite.jpg", lambda p, o: export_jpeg(self.project, o, p))
+        self._export_dialog(
+            "JPEG image (*.jpg *.jpeg)",
+            "composite.jpg",
+            lambda p, o: export_jpeg(self.project, o, p),
+        )
 
     def export_tiff_dialog(self, bit_depth: int) -> None:
         self._export_dialog(
             "TIFF image (*.tif *.tiff)",
             f"composite-{bit_depth}bit.tif",
-            lambda p, o: export_tiff(self.project, o, p, bit_depth=bit_depth),
+            lambda p, o: export_tiff(
+                self.project, o, p, bit_depth=bit_depth
+            ),
         )
 
     def export_psd_dialog(self) -> None:
-        self._export_dialog("Photoshop document (*.psd)", "composite-layered.psd", lambda p, o: export_psd(self.project, o, p))
+        self._export_dialog(
+            "Photoshop document (*.psd)",
+            "composite-layered.psd",
+            lambda p, o: export_psd(self.project, o, p),
+        )
 
     def _export_dialog(self, file_filter: str, default_name: str, exporter) -> None:
-        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Export", default_name, file_filter)
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, "Export", default_name, file_filter
+        )
         if not path:
             return
         try:
             owners = self._ensure_owners()
-            self._set_busy(f"Rendering full-resolution export: {Path(path).name} …")
+            self._set_busy(
+                f"Rendering full-resolution export: {Path(path).name} …"
+            )
             exporter(path, owners)
             self.status.setText(f"Export complete: {path}")
         except Exception as exc:
@@ -449,6 +566,8 @@ class MainWindow(QtWidgets.QMainWindow):
         QtWidgets.QApplication.processEvents()
 
     def _show_error(self, title: str, exc: Exception) -> None:
-        details = "".join(traceback.format_exception_only(type(exc), exc)).strip()
+        details = "".join(
+            traceback.format_exception_only(type(exc), exc)
+        ).strip()
         self.status.setText(f"{title}: {details}")
         QtWidgets.QMessageBox.critical(self, title, details)
