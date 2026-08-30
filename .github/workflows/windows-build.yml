@@ -31,7 +31,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,build]"
 
-      - name: Test ownership, rendering and exports
+      - name: Test engine, UI, rendering and exports
         run: python -m pytest
 
       - name: Package PXCOMP.exe
@@ -47,7 +47,7 @@ jobs:
       - name: Upload Windows executable
         uses: actions/upload-artifact@v4
         with:
-          name: PXCOMP-v0.3.0-windows-x64
+          name: PXCOMP-v0.4.0-windows-x64
           path: dist/PXCOMP.exe
           if-no-files-found: error
           retention-days: 30
