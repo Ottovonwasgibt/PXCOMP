@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 import json
 
-ALGORITHM_VERSION = "1.0"
+ALGORITHM_VERSION = "1.1"
 
 
 @dataclass
@@ -30,16 +30,19 @@ class Project:
     mode: str = "pixel"
     seed: int = 12345
     territory: int = 55
+    vector_points: int = 7
     sources: list[SourceSpec] = field(default_factory=list)
     algorithm_version: str = ALGORITHM_VERSION
 
     def validate(self) -> None:
         if self.width < 1 or self.height < 1:
             raise ValueError("Canvas dimensions must be positive")
-        if self.mode not in {"pixel", "organic"}:
+        if self.mode not in {"pixel", "organic", "vector"}:
             raise ValueError(f"Unsupported allocation mode: {self.mode}")
         if not 0 <= int(self.territory) <= 100:
             raise ValueError("Territory must be between 0 and 100")
+        if not 3 <= int(self.vector_points) <= 32:
+            raise ValueError("Vector points must be between 3 and 32")
         if len(self.sources) > 65534:
             raise ValueError("PXCOMP supports at most 65,534 sources per project")
 
@@ -60,6 +63,7 @@ class Project:
             mode=str(data.get("mode", "pixel")),
             seed=int(data.get("seed", 12345)),
             territory=int(data.get("territory", 55)),
+            vector_points=int(data.get("vector_points", 7)),
             sources=sources,
             algorithm_version=str(data.get("algorithm_version", ALGORITHM_VERSION)),
         )
