@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pxcomp"
-version = "0.3.0"
+version = "0.4.0"
 description = "Deterministic equal-share photographic pixel compositor"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
