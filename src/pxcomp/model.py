@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 import json
 
-ALGORITHM_VERSION = "1.1"
+ALGORITHM_VERSION = "1.2"
 
 
 @dataclass
@@ -31,6 +31,7 @@ class Project:
     seed: int = 12345
     territory: int = 55
     vector_points: int = 7
+    point_spread: int = 100
     sources: list[SourceSpec] = field(default_factory=list)
     algorithm_version: str = ALGORITHM_VERSION
 
@@ -41,8 +42,10 @@ class Project:
             raise ValueError(f"Unsupported allocation mode: {self.mode}")
         if not 0 <= int(self.territory) <= 100:
             raise ValueError("Territory must be between 0 and 100")
-        if not 3 <= int(self.vector_points) <= 32:
-            raise ValueError("Vector points must be between 3 and 32")
+        if not 1 <= int(self.vector_points) <= 32:
+            raise ValueError("Max primitive points must be between 1 and 32")
+        if not 1 <= int(self.point_spread) <= 100:
+            raise ValueError("Point spread must be between 1 and 100")
         if len(self.sources) > 65534:
             raise ValueError("PXCOMP supports at most 65,534 sources per project")
 
@@ -64,6 +67,7 @@ class Project:
             seed=int(data.get("seed", 12345)),
             territory=int(data.get("territory", 55)),
             vector_points=int(data.get("vector_points", 7)),
+            point_spread=int(data.get("point_spread", 100)),
             sources=sources,
             algorithm_version=str(data.get("algorithm_version", ALGORITHM_VERSION)),
         )

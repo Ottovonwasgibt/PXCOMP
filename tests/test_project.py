@@ -1,4 +1,4 @@
-from pxcomp.model import Project, SourceSpec, load_project, save_project
+from pxcomp.model import ALGORITHM_VERSION, Project, SourceSpec, load_project, save_project
 
 
 def test_project_round_trip(tmp_path):
@@ -8,7 +8,8 @@ def test_project_round_trip(tmp_path):
         mode="vector",
         seed=99182,
         territory=73,
-        vector_points=9,
+        vector_points=12,
+        point_spread=100,
         sources=[
             SourceSpec(
                 "C:/shoot/001.CR3",
@@ -22,18 +23,22 @@ def test_project_round_trip(tmp_path):
     save_project(project, path)
     loaded = load_project(path)
     assert loaded.to_dict() == project.to_dict()
+    assert loaded.algorithm_version == ALGORITHM_VERSION
 
 
-def test_old_project_defaults_vector_points():
+def test_v02_project_keeps_legacy_algorithm_and_defaults_point_spread():
     loaded = Project.from_dict(
         {
             "width": 1200,
             "height": 1200,
-            "mode": "organic",
+            "mode": "vector",
             "seed": 12,
             "territory": 55,
+            "vector_points": 7,
             "sources": [],
-            "algorithm_version": "1.0",
+            "algorithm_version": "1.1",
         }
     )
     assert loaded.vector_points == 7
+    assert loaded.point_spread == 100
+    assert loaded.algorithm_version == "1.1"

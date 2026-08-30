@@ -4,14 +4,14 @@ PXCOMP is a Windows desktop image compositor for combining a sequence of photogr
 
 ## Core rule
 
-For `N` source photographs, every output coordinate belongs to exactly one source. The integer pixel quotas are equal to within one pixel when the canvas pixel count is not divisible by `N`.
+For `N` source photographs, every output coordinate belongs to exactly one source. Integer pixel quotas are equal to within one pixel when the canvas pixel count is not divisible by `N`.
 
 That guarantees:
 
 - **100% canvas coverage**
 - **0% overlap between source masks**
 - **0 unassigned pixels**
-- deterministic reconstruction from the project seed and algorithm parameters
+- deterministic reconstruction from project seed, algorithm version, parameters, and source transforms
 
 ## Allocation modes
 
@@ -23,20 +23,32 @@ Every coordinate is randomly assigned while preserving exact equal quotas. This 
 
 Each layer receives its exact quota from the currently unassigned work surface, but selection is driven by smooth deterministic random fields. The Territory control moves from fine fragments toward broad islands/territories without changing the conservation rule.
 
-### Vector Cutouts
+### Vector Cutouts — v0.3 mixed primitives
 
-PXCOMP v0.2 adds hard-edged vector-derived territories. Random points are connected into closed polygon shapes, clipped against the remaining unassigned work surface, and accumulated until each source reaches its exact quota. When a candidate polygon overshoots the remaining quota, it is clipped by a straight directional vector cut rather than feathered or randomly eroded.
+Vector Cutouts use hard geometry rather than seed growth. Every candidate cutout independently chooses a random complexity from `1` through **Max primitive points**:
 
-Controls include **Cutout scale** and **Vector points per cutout**. This mode is intended to produce collage / stencil / cut-paper geometry instead of radial seed-growth blobs. See `docs/VECTOR-TERRITORIES.md` for the algorithm definition.
+- **1 point** → hard rotated stamp / block
+- **2 points** → straight ribbon / slice
+- **3+ points** → connected polygon
 
-## Desktop features in v0.2
+**Point spread** is the maximum separation range for the control geometry. At `100%`, a primitive may span the complete width and/or height of the canvas. Each primitive still randomizes its actual span anywhere from tiny/local up to that maximum, so successive cutouts do not share a fixed spacing or scale. **Cutout scale** biases the random draw toward compact or broad shapes without removing that full range of possibilities.
+
+Every candidate is intersected with the still-unassigned work surface. If it would overshoot a source's remaining quota, PXCOMP clips it with a straight directional half-plane, keeping the boundary crisp. The final source receives the remainder, guaranteeing the core invariant.
+
+PXCOMP v0.3 retains the v0.2 (`algorithm_version: 1.1`) fixed-point polygon generator so previously saved vector projects remain reproducible. Editing an allocation control upgrades that project to the current `1.2` mixed-primitive algorithm.
+
+See `docs/VECTOR-TERRITORIES.md` for the algorithm definition.
+
+## Desktop features in v0.3
 
 - Windows desktop UI (PySide6)
-- drag/drop-style multi-file selection
+- multi-file photographic / RAW input
 - common canvas size
 - per-photo crop, zoom and reposition
 - deterministic seed
 - Pixel Random, Organic Territories, and Vector Cutouts
+- randomized vector complexity from 1 through a selected maximum
+- full-canvas-capable point spread control
 - non-destructive `.pxcomp` project recipes
 - JPEG / PNG input
 - WebP / AVIF where supported by the installed Pillow build
@@ -76,13 +88,13 @@ pyinstaller --clean --noconfirm PXCOMP.spec
 
 The executable is written to `dist/PXCOMP.exe`.
 
-GitHub Actions runs the same tests and packaging process and publishes `PXCOMP-windows-x64` as a workflow artifact.
+GitHub Actions runs the same tests and packaging process and publishes a Windows x64 workflow artifact.
 
 ## Current limits
 
 - The desktop build prioritizes correctness and a usable photographic workflow over tiled/GPU rendering. Very large canvases can consume substantial RAM during full-resolution generation/export.
 - RAW support is broad but depends on the LibRaw version bundled by `rawpy`; newly released or unusual cameras can require a newer decoder.
-- 16-bit TIFF is the high-precision master path; PSD is 8-bit layered in v0.2.
+- 16-bit TIFF is the high-precision master path; PSD is 8-bit layered in v0.3.
 - Source paths in `.pxcomp` projects currently point to the original local files rather than embedding copies.
 
 ## Development

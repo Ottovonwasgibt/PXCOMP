@@ -9,7 +9,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from .alloc import generate_ownership, validate_ownership
 from .exports import export_jpeg, export_png, export_psd, export_tiff
 from .imaging import supported_file_filter
-from .model import Project, SourceSpec, load_project, save_project
+from .model import ALGORITHM_VERSION, Project, SourceSpec, load_project, save_project
 from .render import render_preview_composite, render_preview_source
 
 
@@ -100,7 +100,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         scroll = QtWidgets.QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setFixedWidth(365)
+        scroll.setFixedWidth(375)
         panel = QtWidgets.QWidget()
         form = QtWidgets.QVBoxLayout(panel)
         form.setContentsMargins(16, 16, 16, 24)
@@ -156,7 +156,6 @@ class MainWindow(QtWidgets.QMainWindow):
         reset_crop = QtWidgets.QPushButton("Reset active crop")
         reset_crop.clicked.connect(self.reset_crop)
         form.addWidget(reset_crop)
-
         crop_help = QtWidgets.QLabel(
             "Drag the photograph on the large canvas to reposition it. "
             "Cropping is non-destructive."
@@ -184,7 +183,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.territory_label = QtWidgets.QLabel("Territory size")
         self.territory_label.setStyleSheet("color:#aaa; font-size:11px;")
         form.addWidget(self.territory_label)
-
         territory_row = QtWidgets.QHBoxLayout()
         self.territory_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
         self.territory_slider.setRange(0, 100)
@@ -194,14 +192,26 @@ class MainWindow(QtWidgets.QMainWindow):
         form.addLayout(territory_row)
         self.territory_slider.valueChanged.connect(self._territory_changed)
 
-        self.vector_points_label = QtWidgets.QLabel("Vector points per cutout")
+        self.vector_points_label = QtWidgets.QLabel("Max primitive points")
         self.vector_points_label.setStyleSheet("color:#aaa; font-size:11px;")
         form.addWidget(self.vector_points_label)
         self.vector_points_spin = QtWidgets.QSpinBox()
-        self.vector_points_spin.setRange(3, 32)
-        self.vector_points_spin.setSuffix(" points")
+        self.vector_points_spin.setRange(1, 32)
+        self.vector_points_spin.setSuffix(" max")
         self.vector_points_spin.valueChanged.connect(self._vector_points_changed)
         form.addWidget(self.vector_points_spin)
+
+        self.point_spread_label = QtWidgets.QLabel("Point spread")
+        self.point_spread_label.setStyleSheet("color:#aaa; font-size:11px;")
+        form.addWidget(self.point_spread_label)
+        point_spread_row = QtWidgets.QHBoxLayout()
+        self.point_spread_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.point_spread_slider.setRange(1, 100)
+        self.point_spread_value = QtWidgets.QLabel("100%")
+        point_spread_row.addWidget(self.point_spread_slider)
+        point_spread_row.addWidget(self.point_spread_value)
+        form.addLayout(point_spread_row)
+        self.point_spread_slider.valueChanged.connect(self._point_spread_changed)
 
         seed_row = QtWidgets.QHBoxLayout()
         self.seed_spin = QtWidgets.QSpinBox()
@@ -259,9 +269,7 @@ class MainWindow(QtWidgets.QMainWindow):
         canvas_layout.setContentsMargins(20, 20, 20, 20)
         self.canvas = CanvasView()
         self.canvas.dragged.connect(self.drag_active_source)
-        canvas_layout.addWidget(
-            self.canvas, 1, QtCore.Qt.AlignmentFlag.AlignCenter
-        )
+        canvas_layout.addWidget(self.canvas, 1, QtCore.Qt.AlignmentFlag.AlignCenter)
         root.addWidget(canvas_container, 1)
 
     @staticmethod
@@ -277,6 +285,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.project.seed = self.seed_spin.value()
         self.project.territory = self.territory_slider.value()
         self.project.vector_points = self.vector_points_spin.value()
+        self.project.point_spread = self.point_spread_slider.value()
         self.project.validate()
 
     def _load_controls_from_project(self) -> None:
@@ -287,6 +296,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QtCore.QSignalBlocker(self.seed_spin),
             QtCore.QSignalBlocker(self.territory_slider),
             QtCore.QSignalBlocker(self.vector_points_spin),
+            QtCore.QSignalBlocker(self.point_spread_slider),
         ]
         self.width_spin.setValue(self.project.width)
         self.height_spin.setValue(self.project.height)
@@ -294,6 +304,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.territory_slider.setValue(self.project.territory)
         self.territory_value.setText(str(self.project.territory))
         self.vector_points_spin.setValue(self.project.vector_points)
+        self.point_spread_slider.setValue(self.project.point_spread)
+        self.point_spread_value.setText(f"{self.project.point_spread}%")
         mode_index = self.mode_combo.findData(self.project.mode)
         self.mode_combo.setCurrentIndex(max(0, mode_index))
         del blockers
@@ -310,6 +322,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.territory_value.setVisible(is_spatial)
         self.vector_points_label.setVisible(is_vector)
         self.vector_points_spin.setVisible(is_vector)
+        self.point_spread_label.setVisible(is_vector)
+        self.point_spread_slider.setVisible(is_vector)
+        self.point_spread_value.setVisible(is_vector)
 
         if mode == "pixel":
             self.mode_help.setText(
@@ -323,11 +338,18 @@ class MainWindow(QtWidgets.QMainWindow):
             )
         else:
             self.territory_label.setText("Cutout scale")
-            self.mode_help.setText(
-                "Random points are connected into hard vector polygons. Each polygon is "
-                "clipped against the remaining work surface; quota overshoot is cut by a "
-                "straight vector line. No radial seed growth or feathering."
-            )
+            if str(self.project.algorithm_version).startswith("1.1"):
+                self.mode_help.setText(
+                    "Legacy v0.2 vector recipe: fixed polygon point count is preserved for "
+                    "reproducibility. Change any allocation control to upgrade this project "
+                    "to the v0.3 mixed-primitive algorithm."
+                )
+            else:
+                self.mode_help.setText(
+                    "Each cutout chooses a random complexity from 1 up to Max primitive "
+                    "points. 1 = hard stamp, 2 = ribbon/slice, 3+ = polygon. Point spread "
+                    "sets the maximum separation; at 100% points may span the full canvas."
+                )
 
     def _rebuild_source_list(self) -> None:
         self.source_list.clear()
@@ -341,13 +363,15 @@ class MainWindow(QtWidgets.QMainWindow):
             self.active_index = -1
 
     def _allocation_changed(self, *_args) -> None:
+        if str(self.mode_combo.currentData()) == "vector":
+            self.project.algorithm_version = ALGORITHM_VERSION
         self.owners = None
         self._sync_project_from_controls()
+        self._refresh_mode_controls()
         if self.active_index >= 0:
             self.show_active_source()
 
     def _mode_changed(self, *_args) -> None:
-        self._refresh_mode_controls()
         self._allocation_changed()
 
     def _territory_changed(self, value: int) -> None:
@@ -355,6 +379,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._allocation_changed()
 
     def _vector_points_changed(self, _value: int) -> None:
+        self._allocation_changed()
+
+    def _point_spread_changed(self, value: int) -> None:
+        self.point_spread_value.setText(f"{value}%")
         self._allocation_changed()
 
     def _zoom_changed(self, value: int) -> None:
@@ -451,6 +479,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.project.mode,
                 self.project.territory,
                 self.project.vector_points,
+                self.project.point_spread,
+                self.project.algorithm_version,
             )
             report = validate_ownership(self.owners, len(self.project.sources))
             if not report["valid"]:
@@ -470,6 +500,7 @@ class MainWindow(QtWidgets.QMainWindow):
             shares = counts * 100.0 / owners.size
             self.status.setText(
                 f"Composite generated · {self.project.mode} · "
+                f"algorithm {self.project.algorithm_version} · "
                 f"{len(self.project.sources)} sources · {owners.size:,} pixels · "
                 f"shares {shares.min():.4f}%–{shares.max():.4f}% · "
                 "0 overlap · 0 holes."
@@ -533,9 +564,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._export_dialog(
             "TIFF image (*.tif *.tiff)",
             f"composite-{bit_depth}bit.tif",
-            lambda p, o: export_tiff(
-                self.project, o, p, bit_depth=bit_depth
-            ),
+            lambda p, o: export_tiff(self.project, o, p, bit_depth=bit_depth),
         )
 
     def export_psd_dialog(self) -> None:
@@ -553,9 +582,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         try:
             owners = self._ensure_owners()
-            self._set_busy(
-                f"Rendering full-resolution export: {Path(path).name} …"
-            )
+            self._set_busy(f"Rendering full-resolution export: {Path(path).name} …")
             exporter(path, owners)
             self.status.setText(f"Export complete: {path}")
         except Exception as exc:
@@ -566,8 +593,6 @@ class MainWindow(QtWidgets.QMainWindow):
         QtWidgets.QApplication.processEvents()
 
     def _show_error(self, title: str, exc: Exception) -> None:
-        details = "".join(
-            traceback.format_exception_only(type(exc), exc)
-        ).strip()
+        details = "".join(traceback.format_exception_only(type(exc), exc)).strip()
         self.status.setText(f"{title}: {details}")
         QtWidgets.QMessageBox.critical(self, title, details)
