@@ -1,0 +1,53 @@
+name: Windows desktop build
+
+on:
+  push:
+    branches: ["build/v0-desktop"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,build]"
+
+      - name: Test engine, UI, rendering and exports
+        run: python -m pytest
+
+      - name: Package PXCOMP.exe
+        run: pyinstaller --clean --noconfirm PXCOMP.spec
+
+      - name: Smoke-check package
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist/PXCOMP.exe")) { throw "PXCOMP.exe was not produced" }
+          Get-Item "dist/PXCOMP.exe" | Format-List Name,Length,FullName
+          Get-FileHash "dist/PXCOMP.exe" -Algorithm SHA256
+
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: PXCOMP-v0.4.0-windows-x64
+          path: dist/PXCOMP.exe
+          if-no-files-found: error
+          retention-days: 30
